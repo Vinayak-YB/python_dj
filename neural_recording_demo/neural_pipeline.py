@@ -65,7 +65,55 @@ class RecordingStats(dj.Computed):
     """
     
     def make(self, key):
-        # TODO: Implement tomorrow
+        """
+        Compute statistics for a single recording.
+        This method is called automatically by populate() for each Recording.
+        """
+        # Fetch the recording info
+        recording_info = (Recording & key).fetch1()
+        
+        print(f"Computing stats for Recording: Subject {key['subject_id']}, "
+              f"Session {key['session_id']}, Recording {key['recording_id']}")
+        
+        # Simulate neural signal data
+        # In real life, you'd load actual recorded data from files
+        # Here we generate synthetic neural signals
+        num_channels = recording_info['num_channels']
+        sampling_rate = recording_info['sampling_rate']
+        duration_seconds = 10  # 10 seconds of recording
+        
+        # Generate synthetic neural data (random signals that look realistic)
+        num_samples = int(duration_seconds * sampling_rate)
+        
+        # Simulate multi-channel neural recording
+        # Each channel has baseline activity + some spikes
+        signal = np.random.randn(num_channels, num_samples) * 10  # Background noise
+        
+        # Add some "spike" activity (simulating neuron firing)
+        num_spikes = np.random.randint(50, 200)
+        for _ in range(num_spikes):
+            channel = np.random.randint(0, num_channels)
+            spike_time = np.random.randint(0, num_samples - 100)
+            spike_amplitude = np.random.uniform(50, 150)
+            # Add spike waveform
+            signal[channel, spike_time:spike_time+100] += spike_amplitude * np.exp(-np.linspace(0, 5, 100))
+        
+        # Compute statistics across all channels
+        mean_amplitude = float(np.mean(np.abs(signal)))
+        peak_amplitude = float(np.max(np.abs(signal)))
+        noise_level = float(np.std(signal[signal < 20]))  # Std of low-amplitude signal
+        
+        # Insert the computed statistics into RecordingStats table
+        self.insert1({
+            **key,  # Include all primary keys (subject_id, session_id, recording_id)
+            'mean_amplitude': mean_amplitude,
+            'peak_amplitude': peak_amplitude,
+            'noise_level': noise_level
+        })
+        
+        print(f"  → Mean: {mean_amplitude:.2f} μV, Peak: {peak_amplitude:.2f} μV, "
+              f"Noise: {noise_level:.2f} μV")
+
         pass
 
 
@@ -82,7 +130,7 @@ def populate_sample_data():
         {'subject_id': 5, 'subject_name': 'R002', 'species': 'rat', 'sex': 'M', 'date_of_birth': date(2024, 4, 12)},
     ]
     Subject.insert(subjects, skip_duplicates=True)
-    print(f"✓ Inserted {len(subjects)} subjects")
+    print(f" Inserted {len(subjects)} subjects")
     
     # Insert 10 sessions
     sessions = [
@@ -98,7 +146,7 @@ def populate_sample_data():
         {'subject_id': 5, 'session_id': 2, 'session_date': date(2024, 6, 15), 'experimenter': 'Bob', 'brain_region': 'Striatum'},
     ]
     Session.insert(sessions, skip_duplicates=True)
-    print(f"✓ Inserted {len(sessions)} sessions")
+    print(f" Inserted {len(sessions)} sessions")
     
     # Insert 20 recordings
     recordings = [
@@ -134,7 +182,7 @@ def populate_sample_data():
         {'subject_id': 5, 'session_id': 2, 'recording_id': 2, 'recording_time': time(11, 45), 'num_channels': 64, 'sampling_rate': 25000.0},
     ]
     Recording.insert(recordings, skip_duplicates=True)
-    print(f"✓ Inserted {len(recordings)} recordings")
+    print(f" Inserted {len(recordings)} recordings")
     
     print("\n=== Data Population Complete ===")
 
@@ -151,6 +199,24 @@ def display_summary():
     print("\n--- Sample Sessions ---")
     print(Session())
 
+def compute_all_statistics():
+    """
+    Compute statistics for all recordings that don't have stats yet.
+    This is the magic of Computed tables!
+    """
+    print("\n=== Computing Recording Statistics ===")
+    print(f"Recordings without stats: {len(Recording() - RecordingStats())}")
+    
+    # This ONE line computes stats for ALL recordings automatically!
+    RecordingStats.populate(display_progress=True)
+    
+    print(f"\nTotal statistics computed: {len(RecordingStats())}")
+    print("\n--- Sample Statistics ---")
+    print(RecordingStats())
+
+
+
 if __name__ == '__main__':
-    populate_sample_data()
-    display_summary()
+    # populate_sample_data()
+    # display_summary()
+    compute_all_statistics()
