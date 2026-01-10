@@ -7,8 +7,100 @@ from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont
 import datajoint as dj
 
-# Import your DataJoint schema
+import matplotlib
+matplotlib.use('Qt5Agg')
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+import numpy as np
+
+# DataJoint schema
 from neural_pipeline import Subject, Session, Recording, RecordingStats, schema
+
+class VisualizationDialog(QDialog):
+    """Dialog to show embedded matplotlib visualization"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Recording Statistics Visualization')
+        self.setGeometry(100, 100, 1000, 800)
+        self.initUI()
+        
+    def initUI(self):
+        layout = QVBoxLayout(self)
+        
+        # Create matplotlib figure
+        self.figure = Figure(figsize=(10, 8))
+        self.canvas = FigureCanvas(self.figure)
+        layout.addWidget(self.canvas)
+        
+        # Close button
+        close_btn = QPushButton('Close')
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn)
+        
+        # Generate plot
+        self.plot_statistics()
+        
+    def plot_statistics(self):
+        """Create statistics visualization"""
+        # Fetch all statistics
+        stats_data = RecordingStats.fetch(as_dict=True)
+        
+        if not stats_data:
+            self.figure.text(0.5, 0.5, 'No statistics available', 
+                           ha='center', va='center', fontsize=16)
+            self.canvas.draw()
+            return
+        
+        mean_amps = [s['mean_amplitude'] for s in stats_data]
+        peak_amps = [s['peak_amplitude'] for s in stats_data]
+        noise_levels = [s['noise_level'] for s in stats_data]
+        
+        # Create 2x2 subplot
+        axes = self.figure.subplots(2, 2)
+        self.figure.suptitle('Recording Statistics Summary', fontsize=14, fontweight='bold')
+        
+        # Plot 1: Mean Amplitude
+        axes[0, 0].hist(mean_amps, bins=15, color='skyblue', edgecolor='black', alpha=0.7)
+        axes[0, 0].set_xlabel('Mean Amplitude (μV)')
+        axes[0, 0].set_ylabel('Count')
+        axes[0, 0].set_title('Mean Amplitude Distribution')
+        axes[0, 0].axvline(np.mean(mean_amps), color='red', linestyle='--',
+                          label=f'Avg: {np.mean(mean_amps):.2f} μV')
+        axes[0, 0].legend()
+        axes[0, 0].grid(True, alpha=0.3)
+        
+        # Plot 2: Peak Amplitude
+        axes[0, 1].hist(peak_amps, bins=15, color='coral', edgecolor='black', alpha=0.7)
+        axes[0, 1].set_xlabel('Peak Amplitude (μV)')
+        axes[0, 1].set_ylabel('Count')
+        axes[0, 1].set_title('Peak Amplitude Distribution')
+        axes[0, 1].axvline(np.mean(peak_amps), color='red', linestyle='--',
+                          label=f'Avg: {np.mean(peak_amps):.2f} μV')
+        axes[0, 1].legend()
+        axes[0, 1].grid(True, alpha=0.3)
+        
+        # Plot 3: Noise Level
+        axes[1, 0].hist(noise_levels, bins=15, color='lightgreen', edgecolor='black', alpha=0.7)
+        axes[1, 0].set_xlabel('Noise Level (μV)')
+        axes[1, 0].set_ylabel('Count')
+        axes[1, 0].set_title('Noise Level Distribution')
+        axes[1, 0].axvline(np.mean(noise_levels), color='red', linestyle='--',
+                          label=f'Avg: {np.mean(noise_levels):.2f} μV')
+        axes[1, 0].legend()
+        axes[1, 0].grid(True, alpha=0.3)
+        
+        # Plot 4: Scatter
+        scatter = axes[1, 1].scatter(mean_amps, peak_amps, s=100, alpha=0.6,
+                                    c=noise_levels, cmap='viridis', edgecolor='black')
+        axes[1, 1].set_xlabel('Mean Amplitude (μV)')
+        axes[1, 1].set_ylabel('Peak Amplitude (μV)')
+        axes[1, 1].set_title('Peak vs Mean Amplitude')
+        axes[1, 1].grid(True, alpha=0.3)
+        cbar = self.figure.colorbar(scatter, ax=axes[1, 1])
+        cbar.set_label('Noise (μV)')
+        
+        self.figure.tight_layout()
+        self.canvas.draw()
 
 class NeuralDataManager(QMainWindow):
     def __init__(self):
@@ -21,6 +113,44 @@ class NeuralDataManager(QMainWindow):
         self.setWindowTitle('Neural Recording Data Manager')
         self.setGeometry(100, 100, 1200, 700)
         
+        # Create menu bar
+        menubar = self.menuBar()
+        
+        # File menu
+        file_menu = menubar.addMenu('File')
+        
+        export_action = file_menu.addAction('Export Current Table')
+        export_action.triggered.connect(self.export_data)
+        
+        file_menu.addSeparator()
+        
+        exit_action = file_menu.addAction('Exit')
+        exit_action.triggered.connect(self.close)
+        
+        # Data menu
+        data_menu = menubar.addMenu('Data')
+        
+        refresh_action = data_menu.addAction('Refresh All')
+        refresh_action.triggered.connect(self.refresh_all_tables)
+        
+        add_subject_action = data_menu.addAction('Add Subject')
+        add_subject_action.triggered.connect(self.add_subject)
+        
+        compute_action = data_menu.addAction('Compute Statistics')
+        compute_action.triggered.connect(self.compute_statistics)
+        
+        # View menu
+        view_menu = menubar.addMenu('View')
+        
+        viz_action = view_menu.addAction('Show Visualizations')
+        viz_action.triggered.connect(self.show_visualizations)
+        
+        # Help menu
+        help_menu = menubar.addMenu('Help')
+        
+        about_action = help_menu.addAction('About')
+        about_action.triggered.connect(self.show_about)
+
         # Create central widget and main layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -271,17 +401,29 @@ class NeuralDataManager(QMainWindow):
     def show_visualizations(self):
         """Show visualization plots"""
         try:
-            from neural_pipeline import visualize_statistics_summary
-            self.status_bar.showMessage('Generating visualizations...')
-            QApplication.processEvents()
-            
-            visualize_statistics_summary()
-            
-            self.status_bar.showMessage('✓ Visualizations displayed', 3000)
+            dialog = VisualizationDialog(self)
+            dialog.exec_()
             
         except Exception as e:
             QMessageBox.critical(self, 'Error', f'Failed to create visualizations: {str(e)}')
     
+    def show_about(self):
+        """Show about dialog"""
+        QMessageBox.about(
+            self,
+            'About Neural Recording Data Manager',
+            '<h3>Neural Recording Data Manager</h3>'
+            '<p>A DataJoint-based application for managing neuroscience recording data.</p>'
+            '<p><b>Features:</b></p>'
+            '<ul>'
+            '<li>Manage subjects, sessions, and recordings</li>'
+            '<li>Automated statistics computation</li>'
+            '<li>Data visualization and export</li>'
+            '</ul>'
+            '<p><b>Built with:</b> Python, DataJoint, PyQt5, Matplotlib</p>'
+            '<p>Created for the Laboratory for Optophysiology, University of Freiburg</p>'
+        )
+
     def add_subject(self):
         """Open dialog to add a new subject"""
         dialog = AddSubjectDialog(self)
@@ -437,6 +579,40 @@ def main():
     # Set application style
     app.setStyle('Fusion')
     
+     # Set application-wide stylesheet
+    app.setStyleSheet("""
+        QMainWindow {
+            background-color: #f5f5f5;
+        }
+        QPushButton {
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            font-size: 11pt;
+            border-radius: 4px;
+        }
+        QPushButton:hover {
+            background-color: #357abd;
+        }
+        QPushButton:pressed {
+            background-color: #2868a8;
+        }
+        QTabWidget::pane {
+            border: 1px solid #cccccc;
+            background: white;
+        }
+        QTabBar::tab {
+            background: #e0e0e0;
+            padding: 8px 16px;
+            margin-right: 2px;
+        }
+        QTabBar::tab:selected {
+            background: #4a90e2;
+            color: white;
+        }
+    """)
+
     # Create and show main window
     window = NeuralDataManager()
     window.show()
