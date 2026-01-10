@@ -1,7 +1,7 @@
 import datajoint as dj
 import numpy as np
 from datetime import date, timedelta, time
-
+import matplotlib.pyplot as plt
 
 # Configure connection
 dj.config['database.host'] = 'localhost'
@@ -215,8 +215,147 @@ def compute_all_statistics():
     print(RecordingStats())
 
 
+#Visualization
+
+def visualize_recording_signal(subject_id, session_id, recording_id):
+    """
+    Visualize a synthetic neural signal for a specific recording.
+    Shows multiple channels with spike activity.
+    """
+    # Fetch recording info and stats
+    key = {'subject_id': subject_id, 'session_id': session_id, 'recording_id': recording_id}
+    recording_info = (Recording & key).fetch1()
+    stats = (RecordingStats & key).fetch1()
+    
+    # Generate signal (same logic as in make(), but shorter duration for visualization)
+    num_channels = recording_info['num_channels']
+    sampling_rate = recording_info['sampling_rate']
+    duration_seconds = 1  # Show 1 second for clarity
+    
+    num_samples = int(duration_seconds * sampling_rate)
+    time_axis = np.linspace(0, duration_seconds, num_samples)
+    
+    # Plot first 4 channels only (for readability)
+    channels_to_plot = min(4, num_channels)
+    
+    fig, axes = plt.subplots(channels_to_plot, 1, figsize=(12, 8))
+    fig.suptitle(f'Neural Recording: Subject {subject_id}, Session {session_id}, Recording {recording_id}\n'
+                 f'Mean: {stats["mean_amplitude"]:.2f} μV | Peak: {stats["peak_amplitude"]:.2f} μV | '
+                 f'Noise: {stats["noise_level"]:.2f} μV', fontsize=12, fontweight='bold')
+    
+    for ch in range(channels_to_plot):
+        # Generate synthetic signal for this channel
+        signal = np.random.randn(num_samples) * 10  # Background noise
+        
+        # Add some spikes
+        num_spikes = np.random.randint(3, 8)
+        for _ in range(num_spikes):
+            spike_time = np.random.randint(0, num_samples - 100)
+            spike_amplitude = np.random.uniform(50, 150)
+            signal[spike_time:spike_time+100] += spike_amplitude * np.exp(-np.linspace(0, 5, 100))
+        
+        # Select the correct axis
+        if channels_to_plot == 1:
+            ax = axes
+        else:
+            ax = axes[ch]
+        
+        # Plot the signal
+        ax.plot(time_axis, signal, linewidth=0.5, color='black')
+        ax.set_ylabel(f'Channel {ch+1} (μV)', fontsize=10)
+        ax.set_xlim([0, duration_seconds])
+        ax.grid(True, alpha=0.3)
+        
+        # Only add x-label to bottom plot
+        if ch == channels_to_plot - 1:
+            ax.set_xlabel('Time (seconds)', fontsize=10)
+    
+    plt.tight_layout()
+    
+    # Save the figure
+    filename = f'recording_S{subject_id}_Sess{session_id}_Rec{recording_id}.png'
+    plt.savefig(filename, dpi=150, bbox_inches='tight')
+    print(f" Saved plot: {filename}")
+    plt.show()
+
+
+def visualize_statistics_summary():
+    """
+    Create summary visualizations of all computed statistics.
+    Shows distributions and relationships between different metrics.
+    """
+    # Fetch all statistics
+    stats_data = RecordingStats.fetch(as_dict=True)
+    
+    mean_amps = [s['mean_amplitude'] for s in stats_data]
+    peak_amps = [s['peak_amplitude'] for s in stats_data]
+    noise_levels = [s['noise_level'] for s in stats_data]
+    
+    # Create figure with 4 subplots
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle('Recording Statistics Summary - All 20 Recordings', 
+                 fontsize=16, fontweight='bold')
+    
+    # Plot 1: Mean Amplitude Distribution
+    axes[0, 0].hist(mean_amps, bins=15, color='skyblue', edgecolor='black', alpha=0.7)
+    axes[0, 0].set_xlabel('Mean Amplitude (μV)', fontsize=11)
+    axes[0, 0].set_ylabel('Frequency', fontsize=11)
+    axes[0, 0].set_title('Distribution of Mean Amplitudes', fontsize=12, fontweight='bold')
+    axes[0, 0].axvline(np.mean(mean_amps), color='red', linestyle='--', linewidth=2,
+                       label=f'Average: {np.mean(mean_amps):.2f} μV')
+    axes[0, 0].legend()
+    axes[0, 0].grid(True, alpha=0.3)
+    
+    # Plot 2: Peak Amplitude Distribution
+    axes[0, 1].hist(peak_amps, bins=15, color='coral', edgecolor='black', alpha=0.7)
+    axes[0, 1].set_xlabel('Peak Amplitude (μV)', fontsize=11)
+    axes[0, 1].set_ylabel('Frequency', fontsize=11)
+    axes[0, 1].set_title('Distribution of Peak Amplitudes', fontsize=12, fontweight='bold')
+    axes[0, 1].axvline(np.mean(peak_amps), color='red', linestyle='--', linewidth=2,
+                       label=f'Average: {np.mean(peak_amps):.2f} μV')
+    axes[0, 1].legend()
+    axes[0, 1].grid(True, alpha=0.3)
+    
+    # Plot 3: Noise Level Distribution
+    axes[1, 0].hist(noise_levels, bins=15, color='lightgreen', edgecolor='black', alpha=0.7)
+    axes[1, 0].set_xlabel('Noise Level (μV)', fontsize=11)
+    axes[1, 0].set_ylabel('Frequency', fontsize=11)
+    axes[1, 0].set_title('Distribution of Noise Levels', fontsize=12, fontweight='bold')
+    axes[1, 0].axvline(np.mean(noise_levels), color='red', linestyle='--', linewidth=2,
+                       label=f'Average: {np.mean(noise_levels):.2f} μV')
+    axes[1, 0].legend()
+    axes[1, 0].grid(True, alpha=0.3)
+    
+    # Plot 4: Scatter - Peak vs Mean (colored by noise)
+    scatter = axes[1, 1].scatter(mean_amps, peak_amps, s=100, alpha=0.6,
+                                c=noise_levels, cmap='viridis', edgecolor='black', linewidth=1.5)
+    axes[1, 1].set_xlabel('Mean Amplitude (μV)', fontsize=11)
+    axes[1, 1].set_ylabel('Peak Amplitude (μV)', fontsize=11)
+    axes[1, 1].set_title('Peak vs Mean Amplitude', fontsize=12, fontweight='bold')
+    axes[1, 1].grid(True, alpha=0.3)
+    cbar = plt.colorbar(scatter, ax=axes[1, 1])
+    cbar.set_label('Noise Level (μV)', fontsize=10)
+    
+    plt.tight_layout()
+    
+    # Save the figure
+    plt.savefig('statistics_summary.png', dpi=150, bbox_inches='tight')
+    print(" Saved plot: statistics_summary.png")
+    plt.show()
+
 
 if __name__ == '__main__':
     # populate_sample_data()
     # display_summary()
     compute_all_statistics()
+
+    # Step 3: Create visualizations
+    print("\n=== Creating Visualizations ===\n")
+    
+    # Visualize one example recording (Subject 1, Session 1, Recording 1)
+    visualize_recording_signal(subject_id=1, session_id=1, recording_id=1)
+    
+    # Visualize summary statistics for all recordings
+    visualize_statistics_summary()
+    
+    print("\n All visualizations complete!")
