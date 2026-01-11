@@ -421,7 +421,6 @@ class NeuralDataManager(QMainWindow):
             '<li>Data visualization and export</li>'
             '</ul>'
             '<p><b>Built with:</b> Python, DataJoint, PyQt5, Matplotlib</p>'
-            '<p>Created for the Laboratory for Optophysiology, University of Freiburg</p>'
         )
 
     def add_subject(self):
