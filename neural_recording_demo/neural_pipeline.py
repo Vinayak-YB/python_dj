@@ -3,30 +3,25 @@ import numpy as np
 from datetime import date, timedelta, time
 import matplotlib.pyplot as plt
 
-# Configure connection
+# Connection
 dj.config['database.host'] = 'localhost'
 dj.config['database.user'] = 'root'
 dj.config['database.password'] = 'myroot'
 
-# Create schema
+# Schema
 schema = dj.schema('neural_recording_lab')
 
 @schema
 class Subject(dj.Manual):
     definition = """
-    subject_id : int           # unique subject identifier
+    subject_id : int          
     ---
-    subject_name : varchar(50) # name/code of subject
-    species : varchar(20)      # mouse or rat
-    sex : enum('M', 'F')       # biological sex
-    date_of_birth : date       # birth date
+    subject_name : varchar(50) 
+    species : varchar(20)      
+    sex : enum('M', 'F')       
+    date_of_birth : date       
     """
 
-# YOUR TASK: Add these 3 tables yourself based on what you learned
-
-# 1. Session table
-#    - Should reference Subject (use ->)
-#    - Fields: session_id (int), session_date, experimenter (varchar), brain_region (varchar)
 @schema
 class Session(dj.Manual):
     definition = """
@@ -38,9 +33,6 @@ class Session(dj.Manual):
     brain_region : varchar(100)
     """
 
-# 2. Recording table  
-#    - Should reference Session
-#    - Fields: recording_id (int), recording_time, num_channels (int), sampling_rate (float)
 @schema
 class Recording(dj.Manual):
     definition = """
@@ -51,9 +43,7 @@ class Recording(dj.Manual):
     num_channels : int
     sampling_rate : float
     """
-# 3. RecordingStats table (dj.Computed - we'll implement make() tomorrow)
-#    - Should reference Recording
-#    - Fields: mean_amplitude (float), peak_amplitude (float), noise_level (float)
+
 @schema
 class RecordingStats(dj.Computed):
     definition = """
@@ -67,45 +57,36 @@ class RecordingStats(dj.Computed):
     def make(self, key):
         """
         Compute statistics for a single recording.
-        This method is called automatically by populate() for each Recording.
         """
-        # Fetch the recording info
+        # Fetch recording info
         recording_info = (Recording & key).fetch1()
         
-        print(f"Computing stats for Recording: Subject {key['subject_id']}, "
-              f"Session {key['session_id']}, Recording {key['recording_id']}")
-        
-        # Simulate neural signal data
-        # In real life, you'd load actual recorded data from files
-        # Here we generate synthetic neural signals
+        # Simulate neural signal data - tril dummy values
         num_channels = recording_info['num_channels']
         sampling_rate = recording_info['sampling_rate']
-        duration_seconds = 10  # 10 seconds of recording
+        duration_seconds = 10  
         
         # Generate synthetic neural data (random signals that look realistic)
         num_samples = int(duration_seconds * sampling_rate)
         
-        # Simulate multi-channel neural recording
         # Each channel has baseline activity + some spikes
-        signal = np.random.randn(num_channels, num_samples) * 10  # Background noise
+        signal = np.random.randn(num_channels, num_samples) * 10  # Noise
         
-        # Add some "spike" activity (simulating neuron firing)
         num_spikes = np.random.randint(50, 200)
         for _ in range(num_spikes):
             channel = np.random.randint(0, num_channels)
             spike_time = np.random.randint(0, num_samples - 100)
             spike_amplitude = np.random.uniform(50, 150)
-            # Add spike waveform
             signal[channel, spike_time:spike_time+100] += spike_amplitude * np.exp(-np.linspace(0, 5, 100))
         
         # Compute statistics across all channels
         mean_amplitude = float(np.mean(np.abs(signal)))
         peak_amplitude = float(np.max(np.abs(signal)))
-        noise_level = float(np.std(signal[signal < 20]))  # Std of low-amplitude signal
+        noise_level = float(np.std(signal[signal < 20]))  
         
-        # Insert the computed statistics into RecordingStats table
+        # Insert the stats data into RecordingStats table
         self.insert1({
-            **key,  # Include all primary keys (subject_id, session_id, recording_id)
+            **key,  
             'mean_amplitude': mean_amplitude,
             'peak_amplitude': peak_amplitude,
             'noise_level': noise_level
@@ -119,7 +100,6 @@ class RecordingStats(dj.Computed):
 
 
 def populate_sample_data():
-    """Populate database with sample neuroscience data"""
     
     # Insert 5 subjects
     subjects = [
@@ -200,42 +180,32 @@ def display_summary():
     print(Session())
 
 def compute_all_statistics():
-    """
-    Compute statistics for all recordings that don't have stats yet.
-    This is the magic of Computed tables!
-    """
     print("\n=== Computing Recording Statistics ===")
     print(f"Recordings without stats: {len(Recording() - RecordingStats())}")
     
-    # This ONE line computes stats for ALL recordings automatically!
-    RecordingStats.populate(display_progress=True)
+    RecordingStats.populate(display_progress=True) 
     
     print(f"\nTotal statistics computed: {len(RecordingStats())}")
     print("\n--- Sample Statistics ---")
     print(RecordingStats())
 
 
-#Visualization
+#Visualization PARTS
 
 def visualize_recording_signal(subject_id, session_id, recording_id):
-    """
-    Visualize a synthetic neural signal for a specific recording.
-    Shows multiple channels with spike activity.
-    """
     # Fetch recording info and stats
     key = {'subject_id': subject_id, 'session_id': session_id, 'recording_id': recording_id}
     recording_info = (Recording & key).fetch1()
     stats = (RecordingStats & key).fetch1()
     
-    # Generate signal (same logic as in make(), but shorter duration for visualization)
     num_channels = recording_info['num_channels']
     sampling_rate = recording_info['sampling_rate']
-    duration_seconds = 1  # Show 1 second for clarity
+    duration_seconds = 1 
     
     num_samples = int(duration_seconds * sampling_rate)
     time_axis = np.linspace(0, duration_seconds, num_samples)
     
-    # Plot first 4 channels only (for readability)
+    # Plotting 4 channels
     channels_to_plot = min(4, num_channels)
     
     fig, axes = plt.subplots(channels_to_plot, 1, figsize=(12, 8))
@@ -245,16 +215,15 @@ def visualize_recording_signal(subject_id, session_id, recording_id):
     
     for ch in range(channels_to_plot):
         # Generate synthetic signal for this channel
-        signal = np.random.randn(num_samples) * 10  # Background noise
+        signal = np.random.randn(num_samples) * 10  
         
-        # Add some spikes
+        # Adding Spikes
         num_spikes = np.random.randint(3, 8)
         for _ in range(num_spikes):
             spike_time = np.random.randint(0, num_samples - 100)
             spike_amplitude = np.random.uniform(50, 150)
             signal[spike_time:spike_time+100] += spike_amplitude * np.exp(-np.linspace(0, 5, 100))
         
-        # Select the correct axis
         if channels_to_plot == 1:
             ax = axes
         else:
@@ -272,7 +241,6 @@ def visualize_recording_signal(subject_id, session_id, recording_id):
     
     plt.tight_layout()
     
-    # Save the figure
     filename = f'recording_S{subject_id}_Sess{session_id}_Rec{recording_id}.png'
     plt.savefig(filename, dpi=150, bbox_inches='tight')
     print(f" Saved plot: {filename}")
@@ -280,10 +248,6 @@ def visualize_recording_signal(subject_id, session_id, recording_id):
 
 
 def visualize_statistics_summary():
-    """
-    Create summary visualizations of all computed statistics.
-    Shows distributions and relationships between different metrics.
-    """
     # Fetch all statistics
     stats_data = RecordingStats.fetch(as_dict=True)
     
@@ -338,7 +302,6 @@ def visualize_statistics_summary():
     
     plt.tight_layout()
     
-    # Save the figure
     plt.savefig('statistics_summary.png', dpi=150, bbox_inches='tight')
     print(" Saved plot: statistics_summary.png")
     plt.show()
@@ -349,13 +312,8 @@ if __name__ == '__main__':
     # display_summary()
     compute_all_statistics()
 
-    # Step 3: Create visualizations
     print("\n=== Creating Visualizations ===\n")
-    
-    # Visualize one example recording (Subject 1, Session 1, Recording 1)
     visualize_recording_signal(subject_id=1, session_id=1, recording_id=1)
-    
-    # Visualize summary statistics for all recordings
     visualize_statistics_summary()
     
     print("\n All visualizations complete!")
